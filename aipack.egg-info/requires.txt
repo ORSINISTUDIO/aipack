@@ -1,0 +1,7 @@
+
+[rich]
+rich>=13
+
+[tokenizer]
+transformers>=4.38
+sentencepiece

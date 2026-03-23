@@ -1,0 +1,182 @@
+# aipack
+
+**AI context compressor for local LLMs.**  
+Reduce tokens in your system prompts, datasets, and context files — before they hit Llama 3, Mistral, Phi, or any BPE-tokenised model running locally.
+
+Zero mandatory dependencies. Pure Python 3.9+.
+
+---
+
+## Install
+
+```bash
+pip install aipack
+```
+
+Or from source:
+
+```bash
+git clone https://github.com/yourname/aipack
+cd aipack
+pip install -e .
+```
+
+---
+
+## Quick start
+
+```bash
+# Compress a single file (default profile: semantic)
+aipack compress system_prompt.txt
+
+# Use the Llama-3 profile and overwrite in place
+aipack compress context.txt -p llama3 --overwrite
+
+# Batch-compress an entire data folder
+aipack batch ./data -p extreme -o ./data_compressed
+
+# Dry run: see savings without touching any file
+aipack batch ./data --dry-run
+
+# Show info about a file before compressing
+aipack info huge_context.txt
+
+# List all profiles and passes
+aipack profiles
+```
+
+---
+
+## Profiles
+
+| Profile      | What it does |
+|--------------|-------------|
+| `safe`       | Lossless-ish. Whitespace + exact-duplicate lines only. |
+| `semantic`   | Default. Removes filler phrases + duplicate sentences. |
+| `markdown`   | Compacts headers, strips HR and HTML comments. |
+| `json`       | Minifies JSON. |
+| `jsonl`      | Deduplicates JSONL training records by hash. |
+| `code`       | Strips `#` / `//` / `/* */` comments from source files. |
+| `llama3`     | Full pipeline for Llama-3 chat-format files (handles special tokens). |
+| `extreme`    | All passes. Maximum token reduction, minor fidelity trade-off. |
+
+```bash
+aipack compress file.md -p markdown
+aipack compress train.jsonl -p jsonl --overwrite
+aipack compress code.py -p code -s        # -s shows per-pass stats
+```
+
+---
+
+## Custom pass chains
+
+Build your own pipeline with `-P`:
+
+```bash
+aipack compress context.txt -P whitespace,stopwords,dedup_sentences
+```
+
+Available passes:
+
+| Pass               | Description |
+|--------------------|-------------|
+| `whitespace`       | Collapse spaces, tabs, blank lines |
+| `stopwords`        | Remove low-value filler phrases |
+| `dedup_lines`      | Remove exact duplicate lines |
+| `dedup_sentences`  | Remove near-duplicate sentences |
+| `json_minify`      | Minify JSON |
+| `jsonl_dedup`      | Deduplicate JSONL by hash |
+| `markdown_trim`    | Compact markdown structure |
+| `code_comments`    | Strip code comments |
+| `llama3_special`   | Clean Llama-3 special tokens |
+
+---
+
+## Python API
+
+```python
+from aipack import compress_text, compress_file
+from pathlib import Path
+
+# In-memory
+text = open("system_prompt.txt").read()
+compressed, stats = compress_text(text, profile="llama3")
+
+print(f"Saved {stats.tokens_saved} tokens ({stats.ratio*100:.1f}%)")
+print(compressed)
+
+# File → file
+stats = compress_file(
+    Path("data/train.jsonl"),
+    Path("data/train.compressed.jsonl"),
+    profile="jsonl",
+)
+print(stats.summary())
+
+# Custom passes
+compressed, stats = compress_text(
+    text,
+    custom_passes=["whitespace", "dedup_lines", "stopwords"],
+)
+```
+
+### CompressResult fields
+
+```python
+stats.original_bytes    # int
+stats.compressed_bytes  # int
+stats.original_tokens   # int  (BPE estimate)
+stats.compressed_tokens # int
+stats.ratio             # float  0.0 – 1.0 (fraction saved)
+stats.tokens_saved      # int
+stats.techniques        # dict[pass_name, pct_saved]
+stats.passes            # list[str]  passes that had effect
+stats.summary()         # formatted string
+```
+
+---
+
+## Extending — add your own pass
+
+```python
+# my_passes.py
+import re
+from aipack.compress import PASS_REGISTRY
+
+def _pass_strip_urls(text: str) -> tuple[str, float]:
+    before = len(text)
+    text = re.sub(r"https?://\S+", "[URL]", text)
+    saved = max(0.0, (before - len(text)) / max(before, 1))
+    return text, saved
+
+# Register before calling compress_text
+PASS_REGISTRY["strip_urls"] = _pass_strip_urls
+```
+
+Then use it:
+
+```bash
+# If running via the API:
+from aipack import compress_text
+import my_passes  # registers the pass as side-effect
+compressed, stats = compress_text(text, custom_passes=["strip_urls", "whitespace"])
+```
+
+---
+
+## Typical savings
+
+| Content type             | Profile    | Typical reduction |
+|--------------------------|------------|-------------------|
+| System prompts           | `semantic` | 15 – 35 %         |
+| Llama-3 chat files       | `llama3`   | 20 – 40 %         |
+| JSONL training sets      | `jsonl`    | 5 – 60 % (dedup)  |
+| Markdown documentation   | `markdown` | 10 – 25 %         |
+| Source code              | `code`     | 10 – 30 %         |
+| Mixed / unknown          | `extreme`  | 25 – 55 %         |
+
+---
+
+## License
+
+MIT

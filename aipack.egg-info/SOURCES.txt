@@ -1,0 +1,13 @@
+README.md
+pyproject.toml
+setup.py
+aipack/__init__.py
+aipack/cli.py
+aipack/compress.py
+aipack.egg-info/PKG-INFO
+aipack.egg-info/SOURCES.txt
+aipack.egg-info/dependency_links.txt
+aipack.egg-info/entry_points.txt
+aipack.egg-info/requires.txt
+aipack.egg-info/top_level.txt
+tests/test_compress.py
